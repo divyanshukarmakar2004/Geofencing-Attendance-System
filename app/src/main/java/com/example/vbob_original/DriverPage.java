@@ -1,7 +1,10 @@
 package com.example.vbob_original;
 
+import android.app.Activity;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.Location;
+import android.os.Build;
 import android.os.Bundle;
 
 import androidx.activity.EdgeToEdge;
@@ -32,7 +35,9 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
 
@@ -41,8 +46,11 @@ public class DriverPage extends AppCompatActivity {
     FusedLocationProviderClient fusedLocationClient;
     LocationRequest locationRequest;
     LocationCallback locationCallback;
-    String bus_num;
-    private TextView latTextView;
+    String busId,dateTime;
+
+    int turnOnLocationSwitch;
+    private TextView latTextView,busIdTextView,statusTextView,dateTimeTextView;
+
     private TextView lonTextView;
     private Button startButton;
     String driverID;
@@ -55,52 +63,81 @@ public class DriverPage extends AppCompatActivity {
         latTextView = findViewById(R.id.latitude);
         lonTextView = findViewById(R.id.longitude);
         startButton = findViewById(R.id.current_location);
+        busIdTextView=findViewById(R.id.bus_id);
+        statusTextView=findViewById(R.id.status);
+        dateTimeTextView=findViewById(R.id.date_time);
 
-
-        //Reading Bus number of respective driver using driverID
-        driverID=FirebaseAuth.getInstance().getCurrentUser().getEmail().toString();
-        // driverID is in the form of xyz@driver.com
-        // removing @driver.com
-        int index=driverID.indexOf("@");
-        driverID=driverID.substring(0,index);
-        findBusNumber(driverID);
+        turnOnLocationSwitch=0;
 
 
 
-
-        // Check and request location permissions
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                        != PackageManager.PERMISSION_GRANTED) {
-
-            ActivityCompat.requestPermissions(this,
-                    new String[]{
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                    }, 1001);
-        }
+        statusTextView.setText("NOT ACTIVE");
 
 
-        startButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startLocationUpdates();
-            }
-        });
+
+
+        String email=FirebaseAuth.getInstance().getCurrentUser().getEmail().toString();
+        int index=email.indexOf("@");
+        busId=email.substring(0,index).toUpperCase();
+
+        busIdTextView.setText(busId);
+
+
+
+
+
+
+
+
+
+
+
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-        locationRequest = new LocationRequest.Builder(1000)  // Update interval in milliseconds
-                .setMinUpdateIntervalMillis(500)  // Fastest update interval
+
+
+        locationRequest = new LocationRequest.Builder(2000)
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
                 .build();
 
 
+        startButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+                if (turnOnLocationSwitch==0) {
+
+                    if (checkLocationPermission() == false) {
+                        ActivityCompat.requestPermissions(DriverPage.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 100);
+
+                    }
+
+                    if (checkLocationPermission() == false) return;
+                    else {
+                        startLocationUpdates();
+                        turnOnLocationSwitch=1;
+                        startButton.setText("STOP LOCATION TRACKING");
+
+                    }
+
+                }
+                else {
+                    stopLocationUpdates();
+                    turnOnLocationSwitch=0;
+                    startButton.setText("START LOCATION TRACKING");
+
+                }
+
+            }
+        });
+
+        setupLocationCallback();
 
 
 
 
-        addGeofence();
+
+
 
 
 
@@ -112,83 +149,142 @@ public class DriverPage extends AppCompatActivity {
         });
     }
 
-    private void findBusNumber(String driverID) {
-        Toast.makeText(this, driverID, Toast.LENGTH_SHORT).show();
-        DatabaseReference databaseReference= FirebaseDatabase.getInstance().getReference().child("Driver_Detail").child(driverID);
-        databaseReference.addValueEventListener(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot snapshot) {
-                bus_num=snapshot.getValue(String.class);
-                Toast.makeText(DriverPage.this, bus_num , Toast.LENGTH_SHORT).show();
-            }
 
-            @Override
-            public void onCancelled(@NonNull DatabaseError error) {
-
-            }
-        });
-
-
-    }
-
-    private void addGeofence()
+    private boolean checkLocationPermission()
     {
+        if (ContextCompat.checkSelfPermission(DriverPage.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
 
-        locationCallback = new LocationCallback() {
-            @Override
-            public void onLocationResult(@NonNull LocationResult locationResult) {
-                super.onLocationResult(locationResult);
-                if (locationResult == null) {
-                    return;
-                }
-                for (Location location : locationResult.getLocations()) {
-                    double latitude = location.getLatitude();
-                    double longitude = location.getLongitude();
-                    //Custom made geofence based on VIT's main gate longitude and latitude and doing +-0.001 with the it to make a squared fence
-                    if (latitude>=12.8394 && latitude<=12.8414 && longitude>=80.1517 && longitude<=80.1537)
-                    {
-                        Toast.makeText(DriverPage.this, "Reached", Toast.LENGTH_SHORT).show();
-                        stopLocationUpdates();
-                        storeCurrentDateAndTime();
-
-                    }
-
-                    latTextView.setText("Latitude: " + latitude);
-                    lonTextView.setText("Longitude: " + longitude);
-                }
-            }
-        };
-
-
+            return false;
+        }
+        return true;
     }
+
+
 
     private void startLocationUpdates() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED) {
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+
+            statusTextView.setText("ACTIVE");
+            statusTextView.setTextColor(Color.parseColor("#57bc22"));
+
             fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
         }
     }
 
-    private void stopLocationUpdates() {
-        fusedLocationClient.removeLocationUpdates(locationCallback);
+    private void setupLocationCallback() {
+
+        locationCallback = new LocationCallback() {
+
+            @Override
+            public void onLocationResult(@NonNull LocationResult locationResult) {
+
+                Location location = locationResult.getLastLocation();
+
+                if (location != null) {
+                    double latitude = location.getLatitude();
+                    double longitude = location.getLongitude();
+                    latTextView.setText(""+latitude);
+                    lonTextView.setText("" + longitude);
+
+
+
+                    saveLocationToFirebaseDatabase(latitude,longitude);
+                }
+            }
+        };
     }
 
-    public void storeCurrentDateAndTime()
-    {
+    private void saveLocationToFirebaseDatabase(double latitude, double longitude) {
 
         LocalDateTime currentDateTime = LocalDateTime.now();
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
-        String dateString = currentDateTime.format(dateFormatter);
+
+        DateTimeFormatter formatter=DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
 
 
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
-        String timeString = currentDateTime.format(timeFormatter);
-        Toast.makeText(this, dateString+" "+timeString+" "+bus_num, Toast.LENGTH_SHORT).show();
-        FirebaseDatabase.getInstance().getReference("Arrival_Detail").child(dateString).child(bus_num).setValue(timeString);
+        dateTime=currentDateTime.format(formatter);
+
+
+        dateTimeTextView.setText(dateTime);
+
+        DatabaseReference databaseReference=FirebaseDatabase.getInstance().getReference();
+
+
+        databaseReference.child("bus_details").child(busId).child("latitude").setValue(latitude);
+        databaseReference.child("bus_details").child(busId).child("longitude").setValue(longitude);
+        databaseReference.child("bus_details").child(busId).child("last_updated").setValue(dateTime);
+
+        if (( latitude>=12.8405658-0.00044916 && latitude<=12.8405658+0.00044916) && (longitude>=80.1530578-0.00044916 && longitude<=80.1530578+0.00044916))
+        {
+            if ((latitude>= 12.8405658 - 0.00044916 &&
+                    latitude <= 12.8405658 + 0.00044916) &&
+
+                    (longitude >= 80.1530578 - 0.00044916 &&
+                            longitude <= 80.1530578 + 0.00044916)) {
+
+                String expectedTime = "08:00";
+
+                DateTimeFormatter timeFormatter =
+                        DateTimeFormatter.ofPattern("HH:mm");
+
+                String currentTime =
+                        currentDateTime.format(timeFormatter);
+
+//                String currentTime="08:20";
+
+                LocalTime expectedLocalTime =
+                        LocalTime.parse(
+                                expectedTime,
+                                timeFormatter
+                        );
+
+                LocalTime currentLocalTime =
+                        LocalTime.parse(
+                                currentTime,
+                                timeFormatter
+                        );
+
+                FirebaseDatabase.getInstance()
+                        .getReference()
+                        .child("bus_details")
+                        .child(busId)
+                        .child("time_Of_Arrival")
+                        .setValue(currentTime);
+
+                if (currentLocalTime.isAfter(expectedLocalTime)) {
+
+                    DateTimeFormatter dateFormatter=DateTimeFormatter.ofPattern("dd-MM-yyyy");
+
+                    String todayDate=currentDateTime.format(dateFormatter);
+                    FirebaseDatabase.getInstance()
+                            .getReference()
+                            .child("late_buses")
+                            .child(todayDate).push()
+                            .setValue(busId);
+                }
+            }
+        }
+
 
     }
+
+
+
+    private void stopLocationUpdates() {
+
+        fusedLocationClient.removeLocationUpdates(locationCallback);
+
+        statusTextView.setText("NOT ACTIVE");
+        statusTextView.setTextColor(Color.parseColor("#D32F2F"));
+
+    }
+
 
 
 
 
 }
+
+
+
+

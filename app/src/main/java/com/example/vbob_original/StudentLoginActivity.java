@@ -61,7 +61,7 @@ public class StudentLoginActivity extends AppCompatActivity {
                 if (task.isSuccessful())
                 {
                     Toast.makeText(StudentLoginActivity.this, "Succesfully login", Toast.LENGTH_SHORT).show();
-                    startActivity(new Intent(StudentLoginActivity.this, StudentPage.class));
+                    startActivity(new Intent(StudentLoginActivity.this, StudentTrackingActivity.class));
                 }
                 else
                 {
